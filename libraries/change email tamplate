@@ -1,0 +1,12 @@
+1. FORGOT password
+2.registration 
+3.deligate_questioniare_basics_if_email
+4.deligate_questioniare_basics_else_email -need to add company name by controller
+5.Delegate notify mail when they were notified from a SMB -Not found  
+6. delegate_reg_admin- Delegate assigned email to admin 
+7.deligate_assign_question- Delegate receive an email notification when a new question has been assigned to them
+change in file -
+8.smb_order_bundle - Order placed SMB 
+ -order_process controller change email_subject 
+- email_to_smb  function add company name  (NOt added)
+

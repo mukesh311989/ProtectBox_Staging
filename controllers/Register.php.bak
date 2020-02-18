@@ -1,0 +1,249 @@
+<?php
+defined('BASEPATH') OR exit('No direct script access allowed');
+include("sageone/sageone_constants.php");
+include("sageone/SageoneClient.php");
+include("sageone/SageoneSigner.php");
+class Register extends CI_Controller {
+
+	/**
+	 * Index Page for this controller.
+	 *
+	 * Maps to the following URL
+	 * 		http://example.com/index.php/welcome
+	 *	- or -
+	 * 		http://example.com/index.php/welcome/index
+	 *	- or -
+	 * Since this controller is set as the default controller in
+	 * config/routes.php, it's displayed at http://example.com/
+	 *
+	 * So any other public methods not prefixed with an underscore will
+	 * map to /index.php/welcome/<method_name>
+	 * @see https://codeigniter.com/user_guide/general/urls.html
+	 */
+
+	public function __construct() {
+      parent::__construct();	
+	  //$this->load->library('Emailtemplate');	
+
+	}
+	public function index()
+	{
+		/*$client_id = '9c6c1e5b4c2c1309ecff';
+		$client_secret = '6965ca8544c7f66969fab1c937f0cca91d4d8cb1';
+		$signing_secret = '5bddf0f6dfd92323867f78479120cbcb4feaff8c';
+		$apim_subscription_key = '971e791e220944daa237ff805632dbe2';
+		$callback_url = 'https://staging.protectbox.com/register/callback';
+		$scope = 'full_access';
+		$auth_endpoint = 'http://www.sageone.com/oauth2/auth';
+		//$us_token_endpoint = 'http://mysageone.na.sageone.com/oauth2/token';
+		//$ca_token_endpoint = 'http://mysageone.ca.sageone.com/oauth2/token';
+		$uki_token_endpoint = 'http://app.sageone.com/oauth2/token';
+		//$us_base_endpoint = 'https://api.columbus.sage.com/us/sageone/';
+		//$ca_base_endpoint = 'https://api.columbus.sage.com/ca/sageone/';
+		$uki_base_endpoint = 'https://api.columbus.sage.com/uki/sageone/';*/
+
+		$this->load->library('recaptcha');
+        $recaptcha = $this->input->post('g-recaptcha-response');
+        if (!empty($recaptcha)) {
+            $response = $this->recaptcha->verifyResponse($recaptcha);
+            if (isset($response['success']) and $response['success'] === true) {
+                echo "You got it!";
+            }
+        }
+
+        $data = array(
+            'widget' => $this->recaptcha->getWidget(),
+            'script' => $this->recaptcha->getScriptTag(),
+        );
+		$this->load->view('register',$data);
+	}
+	
+
+	public function add_user()
+	{
+		$this->load->model('signup_m');
+		$this->load->model('delicate_signup_m');
+		$user_type = $this->input->post('account_type');
+		$company_name = $this->input->post('company_name');
+		$firstname = $this->input->post('first_name');
+		$lastname = $this->input->post('last_name');
+		$fullname = $firstname ." ". $lastname;
+		$email = $this->input->post('email_id');
+		$phone = "";
+		$password = $this->input->post('password');
+		$delegate_email = $this->input->post('delegate_email');
+		
+		$receive_email = $this->input->post('receive_email');
+		if($receive_email == 'on')
+		{
+			$email_notification = 1;
+		}
+		else{
+			$email_notification = 0;
+		}
+		
+		$registration_date = time();
+		$address = "";
+
+		if($this->input->post('delegate_status') == 'on')
+		{
+			$delegate_status = 1;
+		}
+		else{
+			$delegate_status = 0;
+		}
+		
+		
+		$email_notification_status = 1;
+
+		$records=array('user_type'=>$user_type,'company_name'=> $company_name,'firstname'=> $firstname,'lastname'=> $lastname,'email'=> $email,'phone'=> $phone,'password'=> $password,'email_notification'=> $email_notification,'registration_date'=> $registration_date,'address'=> $address,'delegate_status'=> $delegate_status,'email_notification_status'=> $email_notification_status,'status'=> '1');
+		
+		$prevent_copy = $this->signup_m->prevent_copy($email);
+		if($prevent_copy < 1)
+		{
+			if($delegate_status == 0)
+			{
+				$insert_data = $this->signup_m->insert_user($records);
+				$session_data = array(
+										'user_id' => $insert_data,
+										'user_type' => $user_type,
+										'name' =>$fullname,
+										'email'=>$email
+									  );
+				$this->session->set_userdata('logged_in', $session_data);
+				if($this->session->userdata['logged_in']['user_type'] == "Small and medium business"){
+					$fullname = $fullname;
+					$message = $this->emailtemplate->regisuccess($fullname);
+					
+					$this->load->library('email');
+					$this->email->set_mailtype("html");
+
+					$this->email->from('noreply@protectbox.com', 'ProtectBox');
+					$this->email->to($email); 
+
+					$this->email->subject('Registration Confirmation-ProtectBox');
+					$this->email->message($message);    
+
+					$okay = $this->email->send();
+					redirect('questionaire');
+				}
+				else if($this->session->userdata['logged_in']['user_type'] == "Supplier")
+				{
+					$fullname = $fullname;
+					$regi_message = $this->emailtemplate->regisuccess($fullname);
+					$this->load->library('email');
+					$this->email->set_mailtype("html");
+					$this->email->from('noreply@protectbox.com', 'ProtectBox');
+					$this->email->to($email); 
+
+					$this->email->subject('Registration Confirmation-ProtectBox');
+					$this->email->message($message);    
+
+					$okay = $this->email->send();
+					redirect('edit_solution');
+				}
+			}else{
+				$check_delegate = $this->signup_m->prevent_delegate($delegate_email);
+				if($check_delegate < 1){
+					$insert_data = $this->signup_m->insert_user($records);
+					if($insert_data)
+					{
+						 $session_data = array(
+												'user_id' => $insert_data,
+												'user_type' => $user_type,
+												'name' =>$fullname,
+												'email'=>$email
+											  );
+						$this->session->set_userdata('logged_in', $session_data);
+						//echo $this->session->userdata['logged_in']['user_id'];
+						if($this->session->userdata['logged_in']['user_type'] == "Small and medium business")
+						{
+							$delegate_key = md5($delegate_email);
+							$date= time();
+							
+
+							$check_delegate_main = $this->signup_m->check_delegate_main($delegate_email);
+							if(sizeof($check_delegate_main) > 0){
+								$delegate_array = array('user_id' => $check_delegate_main->user_id, 'sme_id' => $insert_data, 'delicate_email' => $delegate_email, 'delicate_key' =>$delegate_key , 'status' => 'active', 'date' => $date);
+								$insert_delegate = $this->signup_m->add_delegate($delegate_array);
+
+								$all_array = array("user_id"=> $check_delegate_main->user_id,"sme_id"=> $insert_data);
+								$insert_all = $this->delicate_signup_m->insert_all($all_array);
+
+								$del_message = $this->emailtemplate->deligate_questioniare_basics_else_email($delegate_email,$firstname,$lastname,$delegate_key);
+								$this->load->library('email');
+								$this->email->set_mailtype("html");
+								$this->email->from('noreply@protectbox.com', 'ProtectBox');
+								$this->email->to($delegate_email); 
+
+								$this->email->subject('Delegate User');
+								$this->email->message($del_message);    
+
+								$okay = $this->email->send();
+							}else{
+								$delegate_array = array('sme_id' => $insert_data, 'delicate_email' => $delegate_email, 'delicate_key' =>$delegate_key , 'status' => 'inactive', 'date' => $date);
+								$insert_delegate = $this->signup_m->add_delegate($delegate_array);
+
+								$del_message = $this->emailtemplate->deligate_questioniare_basics_if_email($delegate_email,$firstname,$lastname,$delegate_key);
+								$this->load->library('email');
+								$this->email->set_mailtype("html");
+								$this->email->from('noreply@protectbox.com', 'ProtectBox');
+								$this->email->to($delegate_email); 
+
+								$this->email->subject('Registration Confirmation-ProtectBox');
+								$this->email->message($del_message);    
+
+								$okay = $this->email->send();
+							}
+							
+
+							$fullname = $fullname;
+							$message = $this->emailtemplate->regisuccess($fullname);
+							
+							$this->load->library('email');
+							$this->email->set_mailtype("html");
+
+							$this->email->from('noreply@protectbox.com', 'ProtectBox');
+							$this->email->to($email); 
+
+							$this->email->subject('Registration Confirmation-ProtectBox');
+							$this->email->message($message);    
+
+							$okay = $this->email->send();
+							redirect('questionaire');
+							
+						}
+						else if($this->session->userdata['logged_in']['user_type'] == "Supplier")
+						{
+							$fullname = $fullname;
+							$regi_message = $this->emailtemplate->regisuccess($fullname);
+							$this->load->library('email');
+							$this->email->set_mailtype("html");
+								$this->email->from('noreply@protectbox.com', 'ProtectBox');
+								$this->email->to($email); 
+
+								$this->email->subject('Registration Confirmation-ProtectBox');
+								$this->email->message($message);    
+
+								$okay = $this->email->send();
+								redirect('edit_solution');
+						}
+							
+					}
+					else{
+						$this->session->set_flashdata("failed", "Something went wrong!");
+						redirect('register');	
+					}
+				}else{
+					$this->session->set_flashdata("delegate_error", "This account holder or delegate user already exists as a username. Please either log in using that username or set up a new, different username.");
+					redirect('register');
+				}
+			}
+			
+		}else{
+			$this->session->set_flashdata("email_error", "This account holder or delegate user already exists as a username. Please either log in using that username or set up a new, different username.");
+			redirect('register');	
+		}
+	}
+}
+?>
